@@ -29,6 +29,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Static folders for uploads (both modules)
 app.use('/uploads/hr', express.static(path.join(__dirname, 'hr/uploads')));
 app.use('/uploads/sp', express.static(path.join(__dirname, 'student-portal/uploads')));
+app.use('/sp/uploads', express.static(path.join(__dirname, 'student-portal/uploads')));
 // Legacy: serve both at /uploads too for backward compatibility
 app.use('/uploads', express.static(path.join(__dirname, 'hr/uploads')));
 
@@ -140,6 +141,7 @@ const boot = async () => {
     app.use('/api/sp/tasks', require('./student-portal/routes/task'));
     app.use('/api/sp/users', require('./student-portal/routes/users'));
     app.use('/api/sp/documents', require('./student-portal/routes/documentRoutes'));
+    app.use('/api/sp/certificates', require('./student-portal/routes/certificates'));
 
     // ── Student Portal Cron Jobs ─────────────────────────────────────────────
     try {
