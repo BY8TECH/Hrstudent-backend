@@ -28,6 +28,61 @@ exports.getDashboard = async (req, res, next) => {
 };
 
 /**
+ * GET /api/sp/certificates/student-details/:userId
+ */
+exports.getStudentDetails = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.params.userId).select("name email courseName studentId");
+        if (!user) return res.status(404).json({ success: false, message: "Student not found" });
+
+        let courseName = user.courseName || "";
+        
+        // 1. Fallback: Check Enrollments in Student Portal DB
+        if (!courseName) {
+            const Enrollment = require("../models/Enrollment");
+            const enrollment = await Enrollment.findOne({ userId: user._id }).populate("courseId");
+            if (enrollment && enrollment.courseId) {
+                courseName = enrollment.courseId.name || enrollment.courseId.courseName || enrollment.courseId.title || "";
+            }
+        }
+
+        // 2. Fallback: Check HR Database (Student record)
+        if (!courseName && user.email) {
+            const hrMongoose = require("mongoose");
+            const Student = hrMongoose.models.Student || hrMongoose.model("Student", require("../../hr/models/Student").schema);
+            const StudentCourse = hrMongoose.models.StudentCourse || hrMongoose.model("StudentCourse", require("../../hr/models/StudentCourse").schema);
+            
+            const hrStudent = await Student.findOne({ email: user.email }).populate("course");
+            if (hrStudent && hrStudent.course) {
+                courseName = hrStudent.course.courseName || "";
+            }
+        }
+
+        // 3. Fallback: Check HR Database (Admission record)
+        if (!courseName && user.email) {
+            const hrMongoose = require("mongoose");
+            const StudentAdmission = hrMongoose.models.StudentAdmission || hrMongoose.model("StudentAdmission", require("../../hr/models/StudentAdmission").schema);
+            const admission = await StudentAdmission.findOne({ email: user.email }).populate("appliedCourse");
+            if (admission && admission.appliedCourse) {
+                courseName = admission.appliedCourse.courseName || "";
+            }
+        }
+
+        res.json({
+            success: true,
+            data: {
+                name: user.name,
+                email: user.email,
+                courseName: courseName,
+                studentId: user.studentId || ""
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+/**
  * GET /api/sp/certificates/requests
  */
 exports.getRequests = async (req, res, next) => {
@@ -51,18 +106,23 @@ exports.getRequests = async (req, res, next) => {
  */
 exports.generateCertificate = async (req, res, next) => {
     try {
-        const { requestId, courseName, content, duration } = req.body;
+        const { requestId, userId, courseName, content, duration } = req.body;
 
-        if (!requestId || !courseName || !content || !duration) {
-            return res.status(400).json({ success: false, message: "All fields are required" });
+        if ((!requestId && !userId) || !courseName || !content || !duration) {
+            return res.status(400).json({ success: false, message: "Required fields missing" });
         }
 
-        const request = await CertificateRequest.findById(requestId).populate("userId");
-        if (!request) {
-            return res.status(404).json({ success: false, message: "Certificate request not found" });
-        }
+        let user;
+        let request = null;
 
-        const user = request.userId;
+        if (requestId) {
+            request = await CertificateRequest.findById(requestId).populate("userId");
+            if (!request) return res.status(404).json({ success: false, message: "Certificate request not found" });
+            user = request.userId;
+        } else {
+            user = await User.findById(userId);
+            if (!user) return res.status(404).json({ success: false, message: "User not found" });
+        }
         const fileName = `certificate_${user._id}_${Date.now()}.pdf`;
         const dirPath = path.join(__dirname, "../uploads/certificates");
         
@@ -131,8 +191,10 @@ exports.generateCertificate = async (req, res, next) => {
             fileUrl: `uploads/certificates/${fileName}`
         });
 
-        request.status = "Approved";
-        await request.save();
+        if (request) {
+            request.status = "Approved";
+            await request.save();
+        }
 
         res.json({
             success: true,

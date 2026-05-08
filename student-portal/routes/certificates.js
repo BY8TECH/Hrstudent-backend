@@ -7,7 +7,8 @@ const {
     getAllCertificates,
     getCertificatesByUserId,
     downloadCertificate,
-    viewCertificate
+    viewCertificate,
+    getStudentDetails
 } = require("../controllers/certificateController");
 const { protect, isAdmin } = require("../middlewares/auth");
 
@@ -21,6 +22,7 @@ router.get("/user/:userId", protect, getCertificatesByUserId);
 // ── Admin Only Routes ─────────────────────────────────────────────────────────
 router.get("/dashboard", protect, isAdmin, getDashboard);
 router.get("/requests", protect, isAdmin, getRequests);
+router.get("/student-details/:userId", protect, isAdmin, getStudentDetails);
 router.post("/generate", protect, isAdmin, generateCertificate);
 router.get("/all", protect, isAdmin, getAllCertificates);
 
