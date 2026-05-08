@@ -114,16 +114,34 @@ exports.generateCertificate = async (req, res, next) => {
 
         let user;
         let request = null;
+        let displayName = "";
+        let displayId = "guest";
 
         if (requestId) {
             request = await CertificateRequest.findById(requestId).populate("userId");
             if (!request) return res.status(404).json({ success: false, message: "Certificate request not found" });
             user = request.userId;
-        } else {
-            user = await User.findById(userId);
-            if (!user) return res.status(404).json({ success: false, message: "User not found" });
+            displayName = request.studentName || (user ? user.name : "Student");
         }
-        const fileName = `certificate_${user._id}_${Date.now()}.pdf`;
+        
+        // If still no user, and userId was provided in body, fetch it
+        if (!user && userId) {
+            user = await User.findById(userId);
+        }
+
+        if (user) {
+            displayName = user.name;
+            displayId = user._id;
+        } else if (request && request.studentName) {
+            displayName = request.studentName;
+            displayId = request._id;
+        }
+
+        if (!displayName) {
+            return res.status(400).json({ success: false, message: "Student information missing" });
+        }
+
+        const fileName = `certificate_${displayId}_${Date.now()}.pdf`;
         const dirPath = path.join(__dirname, "../uploads/certificates");
         
         if (!fs.existsSync(dirPath)) {
@@ -155,7 +173,7 @@ exports.generateCertificate = async (req, res, next) => {
         doc.fillColor("#374151").fontSize(18).font("Helvetica").text("This is to certify that", 0, 230, { align: "center" });
 
         doc.moveDown(0.5);
-        doc.fillColor("#1a3c6e").fontSize(35).font("Helvetica-Bold").text(user.name.toUpperCase(), 0, 260, { align: "center" });
+        doc.fillColor("#1a3c6e").fontSize(35).font("Helvetica-Bold").text(displayName.toUpperCase(), 0, 260, { align: "center" });
 
         doc.moveDown(0.5);
         doc.fillColor("#374151").fontSize(18).font("Helvetica").text(`has successfully completed the course in`, 0, 310, { align: "center" });
@@ -183,8 +201,9 @@ exports.generateCertificate = async (req, res, next) => {
         await new Promise((resolve) => stream.on("finish", resolve));
 
         const certificate = await Certificate.create({
-            userId: user._id,
-            requestId: request._id,
+            userId: user ? user._id : null,
+            studentName: displayName,
+            requestId: request ? request._id : null,
             courseName,
             content,
             duration,

@@ -2,7 +2,9 @@ const mongoose = require("../config/spMongoose");
 
 const certificateSchema = new mongoose.Schema(
     {
-        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
+        studentName: { type: String },
+        studentEmail: { type: String },
         requestId: { type: mongoose.Schema.Types.ObjectId, ref: "CertificateRequest" },
         courseName: { type: String, required: true },
         content: { type: String, required: true },
