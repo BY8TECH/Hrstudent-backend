@@ -29,7 +29,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Static folders for uploads (both modules)
 app.use('/uploads/hr', express.static(path.join(__dirname, 'hr/uploads')));
 app.use('/uploads/sp', express.static(path.join(__dirname, 'student-portal/uploads')));
-app.use('/sp/uploads', express.static(path.join(__dirname, 'student-portal/uploads')));
+app.use('/sp/uploads', express.static(path.join(__dirname, 'uploads')));
 // Legacy: serve both at /uploads too for backward compatibility
 app.use('/uploads', express.static(path.join(__dirname, 'hr/uploads')));
 
