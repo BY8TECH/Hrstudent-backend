@@ -142,7 +142,8 @@ const boot = async () => {
     app.use('/api/sp/users', require('./student-portal/routes/users'));
     app.use('/api/sp/documents', require('./student-portal/routes/documentRoutes'));
     app.use('/api/sp/certificates', require('./student-portal/routes/certificates'));
-    app.use('/api/stripe', require('./student-portal/routes/stripeRoutes'));
+    app.use('/api/sp/stripe', require('./student-portal/routes/stripeRoutes'));
+    app.use('/api/stripe', require('./student-portal/routes/stripeRoutes')); // Keep for webhooks compatibility
 
     // ── Student Portal Cron Jobs ─────────────────────────────────────────────
     try {

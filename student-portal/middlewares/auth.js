@@ -8,7 +8,14 @@ const protect = (req, res, next) => {
     }
     const token = authHeader.split(" ")[1];
     try {
-        const decoded = jwt.verify(token, process.env.SP_JWT_SECRET);
+        // Try verifying with Student Portal secret first, then HR secret as fallback
+        let decoded;
+        try {
+            decoded = jwt.verify(token, process.env.SP_JWT_SECRET);
+        } catch (e) {
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
+        }
+        
         req.user = decoded;
         next();
     } catch {
