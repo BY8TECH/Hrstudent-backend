@@ -98,6 +98,8 @@ exports.getDocuments = async (req, res, next) => {
 
 // ── Download Document ────────────────────────────────────────────────────────
 exports.downloadDocument = async (req, res, next) => {
+    console.log('--- Download Request ---');
+    console.log('DocumentID:', req.params.documentId);
     try {
         const { documentId } = req.params;
 
@@ -107,7 +109,7 @@ exports.downloadDocument = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "Document not found" });
         }
 
-        const filePath = path.join(__dirname, "..", document.fileUrl);
+        const filePath = path.join(process.cwd(), document.fileUrl);
 
         if (!fs.existsSync(filePath)) {
             return res.status(404).json({ success: false, message: "File not found on server" });

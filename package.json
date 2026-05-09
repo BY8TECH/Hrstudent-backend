@@ -7,7 +7,12 @@
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
-  "keywords": ["hr", "student-portal", "management", "api"],
+  "keywords": [
+    "hr",
+    "student-portal",
+    "management",
+    "api"
+  ],
   "author": "BY8Labs",
   "license": "ISC",
   "dependencies": {
@@ -30,7 +35,8 @@
     "nodemailer": "^8.0.1",
     "number-to-words": "^1.2.4",
     "pdfkit": "^0.18.0",
-    "resend": "^6.9.3"
+    "resend": "^6.9.3",
+    "stripe": "^22.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"

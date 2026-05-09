@@ -40,6 +40,19 @@ const sendPushNotifications = async (tokens, title, body, data = {}) => {
                     title: title || "Hello 👋",
                     body: body || "New Notification",
                 },
+                android: {
+                    notification: {
+                        channelId: 'student_alerts_v2',
+                        sound: 'notify'
+                    }
+                },
+                apns: {
+                    payload: {
+                        aps: {
+                            sound: 'notify.wav'
+                        }
+                    }
+                },
                 data: { screen: "home", ...data },
                 tokens: fcmTokens,
             };
@@ -57,7 +70,8 @@ const sendPushNotifications = async (tokens, title, body, data = {}) => {
         try {
             const messages = expoTokens.map((token) => ({
                 to: token,
-                sound: "default",
+                sound: 'notify.wav',
+                channelId: 'student_alerts_v2',
                 title: title || "Hello 👋",
                 body: body || "New Notification",
                 data: { screen: "home", ...data },

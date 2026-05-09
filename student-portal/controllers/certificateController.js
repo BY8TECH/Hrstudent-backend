@@ -106,27 +106,46 @@ exports.getRequests = async (req, res, next) => {
  */
 exports.generateCertificate = async (req, res, next) => {
     try {
-        const { requestId, userId, courseName, content, duration } = req.body;
+        const { requestId, userId, courseName, content, duration, isManual, studentName } = req.body;
 
-        if ((!requestId && !userId) || !courseName || !content || !duration) {
-            return res.status(400).json({ success: false, message: "Required fields missing" });
+        if (!isManual && (!requestId && !userId)) {
+            return res.status(400).json({ success: false, message: "Please select a student or enable manual mode" });
+        }
+
+        if (isManual && !studentName) {
+            return res.status(400).json({ success: false, message: "Student Name is required for manual certificates" });
+        }
+
+        if (!courseName || !content || !duration) {
+            return res.status(400).json({ success: false, message: "Required fields missing (Course, Content, or Duration)" });
+        }
+        
+        // 0. Validate Character Count (Strict 650 character limit)
+        if (content.length > 650) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Content is too long (${content.length} characters). Maximum 650 characters allowed.` 
+            });
         }
 
         let user;
         let request = null;
         let displayName = "";
-        let displayId = "guest";
+        let displayId = "manual";
 
-        if (requestId) {
+        if (isManual) {
+            displayName = studentName;
+        } else if (requestId) {
             request = await CertificateRequest.findById(requestId).populate("userId");
             if (!request) return res.status(404).json({ success: false, message: "Certificate request not found" });
             user = request.userId;
             displayName = request.studentName || (user ? user.name : "Student");
-        }
-        
-        // If still no user, and userId was provided in body, fetch it
-        if (!user && userId) {
+            displayId = user ? user._id : "req";
+        } else if (userId) {
             user = await User.findById(userId);
+            if (!user) return res.status(404).json({ success: false, message: "User not found" });
+            displayName = user.name;
+            displayId = user._id;
         }
 
         if (user) {
@@ -141,6 +160,15 @@ exports.generateCertificate = async (req, res, next) => {
             return res.status(400).json({ success: false, message: "Student information missing" });
         }
 
+        // 1. Generate Certificate Number
+        const lastCert = await Certificate.findOne().sort({ createdAt: -1 });
+        let nextNum = 1001;
+        if (lastCert && lastCert.certificateNumber) {
+            const match = lastCert.certificateNumber.match(/B8LAB(\d+)/);
+            if (match) nextNum = parseInt(match[1]) + 1;
+        }
+        const certNumber = `B8LAB${nextNum}`;
+
         const fileName = `certificate_${displayId}_${Date.now()}.pdf`;
         const dirPath = path.join(__dirname, "../uploads/certificates");
         
@@ -149,52 +177,63 @@ exports.generateCertificate = async (req, res, next) => {
         }
 
         const filePath = path.join(dirPath, fileName);
-        const doc = new PDFDocument({ layout: "landscape", size: "A4", margin: 50 });
+        const doc = new PDFDocument({ layout: "landscape", size: "A4", margin: 0 });
 
         const stream = fs.createWriteStream(filePath);
         doc.pipe(stream);
 
-        // ── PDF Design ──
+        // ── PDF Design with Template ──
         const W = doc.page.width;
         const H = doc.page.height;
 
-        // Border
-        doc.rect(20, 20, W - 40, H - 40).lineWidth(10).stroke("#1a3c6e");
-        doc.rect(30, 30, W - 60, H - 60).lineWidth(2).stroke("#c5a059");
+        // Draw Template Image as Background
+        const templatePath = path.join(__dirname, '..', 'course certificate.jpeg');
+        if (fs.existsSync(templatePath)) {
+            doc.image(templatePath, 0, 0, { width: W, height: H });
+        } else {
+            // Fallback border if template is missing
+            doc.rect(20, 20, W - 40, H - 40).lineWidth(10).stroke("#1a3c6e");
+        }
 
-        // Logo / Title
-        doc.fillColor("#1a3c6e").fontSize(40).font("Helvetica-Bold").text("BY8LABS", 0, 80, { align: "center" });
-        doc.fillColor("#374151").fontSize(15).font("Helvetica").text("Technology Learning & Innovation Center", 0, 130, { align: "center" });
+        // Top-Left: Certificate Number (Moved down from top)
+        doc.fillColor("#1a3c6e").fontSize(11).font("Helvetica-Bold").text(`No: ${certNumber}`, 60, 70);
 
+        // Top-Right: Date (Moved down from top)
+        const currentDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        doc.text(`Date: ${currentDate}`, W - 160, 70, { align: 'right', width: 100 });
+
+        // Header: BY8LABS (Optional based on template, added for branding)
+        // doc.fillColor("#1a3c6e").fontSize(32).font("Helvetica-Bold").text("BY8LABS", 0, 110, { align: "center" });
+        doc.fillColor("#1a3c6e").fontSize(12).font("Helvetica").text(" Training & Development & Placement", 0, 100, { align: "center" });
+
+        // Certificate Title
+        doc.moveDown(1.5);
+        doc.fillColor("#1a3c6e").fontSize(38).font("Helvetica-Bold").text("CERTIFICATE", 0, 130, { align: "center" });
+   
+        //of completion
+          doc.fillColor("#1a3c6e").fontSize(15).font("Helvetica").text("of excellence", 0, 180, { align: "center" });
+            doc.fillColor("#1a3c6e").fontSize(15).font("Helvetica").text("This certificate is awarded to", 0, 200, { align: "center" });
+        // Student Name
         doc.moveDown(2);
-        doc.fillColor("#c5a059").fontSize(30).font("Helvetica-Bold").text("CERTIFICATE OF COMPLETION", 0, 180, { align: "center" });
+        doc.fillColor("#1a3c6e").fontSize(38).font("Helvetica-Bold").text(displayName.toUpperCase(), 0, 240, { align: "center" });
 
-        doc.moveDown(1);
-        doc.fillColor("#374151").fontSize(18).font("Helvetica").text("This is to certify that", 0, 230, { align: "center" });
-
+        // Course Name
         doc.moveDown(0.5);
-        doc.fillColor("#1a3c6e").fontSize(35).font("Helvetica-Bold").text(displayName.toUpperCase(), 0, 260, { align: "center" });
+        doc.fillColor("#374151").fontSize(23).font("Helvetica-Bold").text(courseName.toUpperCase(), 0, 280, { align: "center" });
 
-        doc.moveDown(0.5);
-        doc.fillColor("#374151").fontSize(18).font("Helvetica").text(`has successfully completed the course in`, 0, 310, { align: "center" });
+        // Description/Content
+        const contentBoxY = 320; 
+        const sideMargin = 120; 
+        const contentBoxWidth = W - (sideMargin * 2);
 
-        doc.moveDown(0.5);
-        doc.fillColor("#1a3c6e").fontSize(28).font("Helvetica-Bold").text(courseName.toUpperCase(), 0, 340, { align: "center" });
+        doc.fillColor("#000000").fontSize(17).font("Helvetica").text(content, sideMargin, contentBoxY, {
+            align: "center",
+            width: contentBoxWidth,
+            lineGap: 4, 
+        });
 
-        doc.moveDown(1);
-        doc.fillColor("#374151").fontSize(14).font("Helvetica").text(content, 50, 390, { align: "center", width: W - 100 });
-
-        doc.moveDown(1);
-        doc.text(`Duration: ${duration}`, 0, 440, { align: "center" });
-
-        // Footer
-        const footerY = H - 120;
-        doc.lineCap("butt").moveTo(100, footerY).lineTo(250, footerY).lineWidth(1).stroke("#374151");
-        doc.lineCap("butt").moveTo(W - 250, footerY).lineTo(W - 100, footerY).lineWidth(1).stroke("#374151");
-
-        doc.fontSize(12).text("Authorized Signatory", 100, footerY + 10, { width: 150, align: "center" });
-        doc.text("Date of Issue", W - 250, footerY + 10, { width: 150, align: "center" });
-        doc.text(new Date().toLocaleDateString("en-IN"), W - 250, footerY + 25, { width: 150, align: "center" });
+        // Duration (Balanced at bottom, moved slightly to avoid content box)
+        
 
         doc.end();
 
@@ -203,6 +242,7 @@ exports.generateCertificate = async (req, res, next) => {
         const certificate = await Certificate.create({
             userId: user ? user._id : null,
             studentName: displayName,
+            certificateNumber: certNumber,
             requestId: request ? request._id : null,
             courseName,
             content,

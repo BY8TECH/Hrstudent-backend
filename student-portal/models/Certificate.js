@@ -5,6 +5,7 @@ const certificateSchema = new mongoose.Schema(
         userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
         studentName: { type: String },
         studentEmail: { type: String },
+        certificateNumber: { type: String, unique: true },
         requestId: { type: mongoose.Schema.Types.ObjectId, ref: "CertificateRequest" },
         courseName: { type: String, required: true },
         content: { type: String, required: true },

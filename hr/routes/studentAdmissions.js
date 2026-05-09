@@ -56,19 +56,58 @@ router.get('/:id', protect, hrOnly, async (req, res) => {
     }
 });
 
-// ─── POST create new admission application ───────────────────────────────────
+// ─── POST create new admission application & Auto-Create Student ─────────────
 router.post('/', protect, hrOnly, async (req, res) => {
     try {
+        // 1. Create the Admission Application
         const admission = new StudentAdmission({
             ...req.body,
             processedBy: req.user._id,
+            status: 'Approved' // Auto-set to Approved as we are auto-creating student
         });
+
+        // 2. Auto-Create the Student Record
+        const student = new Student({
+            name: admission.applicantName,
+            email: admission.email || undefined,
+            phone: admission.phone || undefined,
+            dateOfBirth: admission.dateOfBirth || undefined,
+            gender: admission.gender || undefined,
+            address: admission.address || undefined,
+            guardianName: admission.guardianName || undefined,
+            guardianPhone: admission.guardianPhone || undefined,
+            course: admission.appliedCourse || undefined,
+            enrollmentDate: new Date(),
+            status: 'Active',
+            notes: `Auto-admitted via application ${admission.admissionId}`,
+        });
+
+        // Save student first to get the _id
+        await student.save();
+
+        // 3. Link Student to Admission
+        admission.student = student._id;
         await admission.save();
+
+        // 4. Update Course Enrolled List
+        if (student.course) {
+            await StudentCourse.findByIdAndUpdate(student.course, {
+                $addToSet: { enrolledStudents: student._id },
+            });
+        }
+
         await admission.populate('appliedCourse', 'courseName courseCode');
-        res.status(201).json(admission);
+        await admission.populate('student', 'studentId name');
+
+        res.status(201).json({
+            message: 'Admission submitted and student record created automatically',
+            admission,
+            student
+        });
     } catch (err) {
+        console.error('Auto-admission error:', err);
         if (err.code === 11000) {
-            return res.status(400).json({ message: 'Admission ID already exists' });
+            return res.status(400).json({ message: 'Admission ID or Student ID already exists' });
         }
         res.status(500).json({ message: 'Server error', error: err.message });
     }

@@ -1,0 +1,86 @@
+const Payment = require("../models/Payment");
+const User = require("../models/User");
+const Course = require("../models/Course");
+
+// Lazy initialization of Stripe to prevent crash if key is missing during startup
+const getStripe = () => {
+    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes("xxxx")) {
+        throw new Error("Stripe API key is missing or invalid in .env file.");
+    }
+    return require("stripe")(process.env.STRIPE_SECRET_KEY);
+};
+
+/**
+ * POST /api/stripe/create-payment-intent
+ * Create a Stripe Payment Intent for course enrollment
+ */
+exports.createPaymentIntent = async (req, res) => {
+    try {
+        const stripe = getStripe();
+        const { amount, productName, userId, courseId } = req.body;
+
+        if (!amount || !userId || !courseId) {
+            return res.status(400).json({ success: false, message: "Missing required fields" });
+        }
+
+        // Create a PaymentIntent with the order amount and currency
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount: amount, // amount in cents/paisa
+            currency: "inr", // default to INR for this project
+            automatic_payment_methods: {
+                enabled: true,
+            },
+            metadata: {
+                userId,
+                courseId,
+                productName
+            }
+        });
+
+        res.json({
+            success: true,
+            clientSecret: paymentIntent.client_secret,
+        });
+    } catch (error) {
+        console.error("Stripe Error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * POST /api/stripe/webhook
+ * Handle Stripe webhooks (e.g. payment_intent.succeeded)
+ */
+exports.handleWebhook = async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    let event;
+
+    try {
+        const stripe = getStripe();
+        event = stripe.webhooks.constructEvent(
+            req.body,
+            sig,
+            process.env.STRIPE_WEBHOOK_SECRET
+        );
+    } catch (err) {
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle the event
+    if (event.type === "payment_intent.succeeded") {
+        const paymentIntent = event.data.object;
+        const { userId, courseId } = paymentIntent.metadata;
+
+        // Update database (e.g. create/update Payment record)
+        try {
+            // Logic to record the successful payment
+            console.log(`💰 Payment succeeded for user ${userId} and course ${courseId}`);
+            
+            // You can call your existing payment logic here or update a separate OnlinePayment model
+        } catch (dbErr) {
+            console.error("Database update error after payment:", dbErr);
+        }
+    }
+
+    res.json({ received: true });
+};
