@@ -19,6 +19,10 @@ const documentSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
+        cloudinaryId: {
+            type: String,
+            required: false,
+        },
         uploadedAt: {
             type: Date,
             default: Date.now,

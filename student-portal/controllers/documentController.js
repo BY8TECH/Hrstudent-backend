@@ -1,6 +1,6 @@
 const Document = require("../models/Document");
-const path = require("path");
-const fs = require("fs");
+const cloudinary = require("../config/cloudinary");
+const { Readable } = require('stream');
 
 // ── Upload Document ──────────────────────────────────────────────────────────
 exports.uploadDocument = async (req, res, next) => {
@@ -15,24 +15,46 @@ exports.uploadDocument = async (req, res, next) => {
             return res.status(400).json({ success: false, message: "courseName is required" });
         }
 
-        // Clean courseName (strip surrounding quotes if any)
+        // Clean courseName
         courseName = courseName.trim().replace(/^"(.*)"$/, "$1");
+
+        // Upload to Cloudinary using buffer stream
+        const uploadToCloudinary = (buffer) => {
+            return new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: "student_portal/docs",
+                        resource_type: "raw", // use raw for PDF
+                        public_id: `doc-${Date.now()}`
+                    },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result);
+                    }
+                );
+                Readable.from(buffer).pipe(stream);
+            });
+        };
+
+        const result = await uploadToCloudinary(req.file.buffer);
 
         const document = await Document.create({
             courseName: courseName.trim(),
             fileName: req.file.originalname,
-            fileUrl: `uploads/docs/${req.file.filename}`,
+            fileUrl: result.secure_url,
+            cloudinaryId: result.public_id
         });
 
         res.status(201).json({
             success: true,
-            message: "Document uploaded successfully",
+            message: "Document uploaded successfully to Cloudinary",
             data: {
                 courseName: document.courseName,
                 fileUrl: document.fileUrl,
             },
         });
     } catch (err) {
+        console.error('Cloudinary Upload Error:', err);
         next(err);
     }
 };
@@ -84,6 +106,7 @@ exports.getDocuments = async (req, res, next) => {
             documentId: doc._id,
             courseName: doc.courseName,
             fileUrl: doc.fileUrl,
+            fileName: doc.fileName,
             uploadedAt: doc.uploadedAt.toISOString().split("T")[0],
         }));
 
@@ -98,7 +121,7 @@ exports.getDocuments = async (req, res, next) => {
 
 // ── Download Document ────────────────────────────────────────────────────────
 exports.downloadDocument = async (req, res, next) => {
-    console.log('--- Download Request ---');
+    console.log('--- Cloudinary Download Request ---');
     console.log('DocumentID:', req.params.documentId);
     try {
         const { documentId } = req.params;
@@ -109,14 +132,16 @@ exports.downloadDocument = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "Document not found" });
         }
 
-        const filePath = path.join(process.cwd(), document.fileUrl);
-
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ success: false, message: "File not found on server" });
+        // For Cloudinary, we can redirect to the secure_url
+        // To force download, we can use the 'fl_attachment' flag in the URL
+        let downloadUrl = document.fileUrl;
+        if (downloadUrl.includes('upload/')) {
+            downloadUrl = downloadUrl.replace('upload/', 'upload/fl_attachment/');
         }
 
-        res.download(filePath, document.fileName);
+        res.redirect(downloadUrl);
     } catch (err) {
-        next(err);
+        console.error('Download error:', err);
+        res.status(500).json({ success: false, message: "Error processing download" });
     }
 };
