@@ -7,6 +7,7 @@ const {
     markAsRead, 
     deleteNotification,
     clearAllNotifications,
+    clearAllNotificationsByUserId,
     saveToken,
     sendBulkNotification
 } = require("../controllers/notificationController");
@@ -23,5 +24,6 @@ router.post('/save-token', protect, saveToken);
 router.get("/all", protect, isAdmin, getAllNotifications);
 router.get("/user/:userId", protect, isAdmin, getNotificationsByUserId);
 router.post('/send-notification', protect, isAdmin, sendBulkNotification);
+router.delete("/clear-all/:userId", protect, isAdmin, clearAllNotificationsByUserId);
 
 module.exports = router;

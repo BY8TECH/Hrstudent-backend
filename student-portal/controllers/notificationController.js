@@ -200,3 +200,21 @@ exports.clearAllNotifications = async (req, res, next) => {
         next(err);
     }
 };
+
+/**
+ * DELETE /api/notifications/clear-all/:userId
+ * Admin Only - Delete all notifications for a specific user ID
+ */
+exports.clearAllNotificationsByUserId = async (req, res, next) => {
+    try {
+        const { userId } = req.params;
+        
+        await Notification.deleteMany({
+            $or: [{ targetAll: true }, { userId }]
+        });
+
+        res.json({ success: true, message: `All notifications for user ${userId} cleared` });
+    } catch (err) {
+        next(err);
+    }
+};
