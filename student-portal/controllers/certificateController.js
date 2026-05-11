@@ -271,7 +271,7 @@ exports.generateCertificate = async (req, res, next) => {
 exports.requestCertificate = async (req, res, next) => {
     try {
         const { courseName, duration } = req.body;
-        const userId = req.user._id;
+        const userId = req.body.userId || req.user.id;
 
         if (!courseName || !duration) {
             return res.status(400).json({ success: false, message: "Course Name and Duration are required" });
@@ -313,11 +313,13 @@ exports.requestCertificate = async (req, res, next) => {
             console.error("Failed to notify HR about certificate request:", notifyError.message);
         }
 
-        res.status(201).json({
+        const responseData = {
             success: true,
             message: "Certificate request submitted successfully",
-            data: request
-        });
+            data: request.toObject ? request.toObject() : request
+        };
+
+        return res.status(201).json(responseData);
     } catch (err) {
         next(err);
     }

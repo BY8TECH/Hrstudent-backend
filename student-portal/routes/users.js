@@ -15,6 +15,7 @@ router.put("/update-fcm-token", updateFCMToken);
  * POST /api/sp/users/update-profile-photo/:userId
  */
 router.post("/update-profile-photo/:userId", protect, upload.single("image"), uploadProfileImage);
+router.post("/upload-profile/:userId", protect, upload.single("image"), uploadProfileImage); // Alias for convenience
 
 /**
  * 🔹 USER: Update Profile

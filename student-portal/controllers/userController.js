@@ -49,14 +49,18 @@ exports.uploadProfileImage = async (req, res, next) => {
                 userToUpdate.profileImage = result.secure_url;
                 await userToUpdate.save();
 
-                res.status(200).json({
+                const updatedUser = await User.findById(userId);
+                
+                const responseData = {
                     success: true,
-                    message: "Profile photo updated successfully",
+                    message: "Profile photo upload successfully",
                     data: {
-                        userId: userToUpdate._id,
-                        profileImage: userToUpdate.profileImage
+                        userId: updatedUser._id,
+                        profileImage: updatedUser.profileImage
                     }
-                });
+                };
+
+                return res.status(200).json(responseData);
             }
         );
 
