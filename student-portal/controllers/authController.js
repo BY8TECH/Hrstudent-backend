@@ -3,10 +3,13 @@ const User = require("../models/User");
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-const generateToken = (user, rememberMe = false) =>
-    jwt.sign({ id: user._id, role: user.role }, process.env.SP_JWT_SECRET, {
+const generateToken = (user, rememberMe = false) => {
+    console.log('--- Token Generation Debug ---');
+    console.log('Secret used for signing:', process.env.SP_JWT_SECRET);
+    return jwt.sign({ id: user._id, role: user.role }, process.env.SP_JWT_SECRET, {
         expiresIn: rememberMe ? "30d" : "1d",
     });
+};
 
 const generateOTP = () =>
     Math.floor(1000 + Math.random() * 9000).toString();

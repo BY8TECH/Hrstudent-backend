@@ -7,18 +7,24 @@ const protect = (req, res, next) => {
         return res.status(401).json({ success: false, message: "No token, authorization denied" });
     }
     const token = authHeader.split(" ")[1];
+
     try {
-        // Try verifying with Student Portal secret first, then HR secret as fallback
-        let decoded;
-        try {
-            decoded = jwt.verify(token, process.env.SP_JWT_SECRET);
-        } catch (e) {
-            decoded = jwt.verify(token, process.env.JWT_SECRET);
-        }
+        // Use the unified secret for all tokens
+        const secret = process.env.JWT_SECRET || process.env.SP_JWT_SECRET;
+        const decoded = jwt.verify(token, secret);
         
-        req.user = decoded;
+        // Normalize payload: HR tokens use { id }, Student tokens use { id, role }
+        // Ensure req.user has an 'id' property regardless of the source
+        req.user = {
+            id: decoded.id || decoded._id,
+            role: decoded.role || 'user'
+        };
+        
         next();
-    } catch {
+    } catch (err) {
+        console.log('--- Auth Failure ---');
+        console.log('Error:', err.message);
+        console.log('Secret used for check:', process.env.JWT_SECRET);
         return res.status(401).json({ success: false, message: "Token is not valid" });
     }
 };

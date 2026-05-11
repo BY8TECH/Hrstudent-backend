@@ -11,10 +11,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.put("/update-fcm-token", updateFCMToken);
 
 /**
- * 🔹 USER: Upload Profile Image
- * POST /api/users/upload-profile/:userId
+ * 🔹 USER: Update Profile Photo (replaces old photo)
+ * POST /api/sp/users/update-profile-photo/:userId
  */
-router.post("/upload-profile/:userId", protect, upload.single("image"), uploadProfileImage);
+router.post("/update-profile-photo/:userId", protect, upload.single("image"), uploadProfileImage);
 
 /**
  * 🔹 USER: Update Profile

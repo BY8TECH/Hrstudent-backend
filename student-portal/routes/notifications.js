@@ -24,6 +24,6 @@ router.post('/save-token', protect, saveToken);
 router.get("/all", protect, isAdmin, getAllNotifications);
 router.get("/user/:userId", protect, isAdmin, getNotificationsByUserId);
 router.post('/send-notification', protect, isAdmin, sendBulkNotification);
-router.delete("/clear-all/:userId", protect, isAdmin, clearAllNotificationsByUserId);
+router.delete("/clear-all/:userId", protect, clearAllNotificationsByUserId);
 
 module.exports = router;

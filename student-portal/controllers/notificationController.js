@@ -203,11 +203,21 @@ exports.clearAllNotifications = async (req, res, next) => {
 
 /**
  * DELETE /api/notifications/clear-all/:userId
- * Admin Only - Delete all notifications for a specific user ID
+ * Allow Admins OR the specific user to clear their notifications
  */
 exports.clearAllNotificationsByUserId = async (req, res, next) => {
     try {
         const { userId } = req.params;
+        const loggedInUserId = req.user.id;
+        const userRole = req.user.role;
+
+        // Validation: Must be Admin OR the requested userId must match the logged-in user
+        if (userRole !== 'admin' && userId !== loggedInUserId) {
+            return res.status(403).json({ 
+                success: false, 
+                message: "Unauthorized: You can only clear your own notifications" 
+            });
+        }
         
         await Notification.deleteMany({
             $or: [{ targetAll: true }, { userId }]

@@ -6,33 +6,39 @@ const Task = require("../models/Task");
 
 // Shared helper: compute dashboard stats for a given userId
 const computeDashboard = async (userId) => {
-    // 1. Fetch student to get courseId
+    // 1. Fetch student
     const student = await User.findById(userId);
     if (!student) throw new Error("Student not found");
 
-    // 2. Fetch course category to get duration in months
-    let duration = 0;
+    // 2. Calculate Total Classes (Days since registration, capped by course duration)
+    const startDate = new Date(student.createdAt || Date.now());
+    const today = new Date();
+    const daysPassed = Math.floor((today - startDate) / (1000 * 60 * 60 * 24)) + 1;
+
+    // Fetch course duration to set a realistic limit
+    let maxClasses = 365; // Default 1 year
     if (student.courseId) {
         const category = await CourseCategory.findOne({ courseId: student.courseId });
         if (category && category.duration) {
-            duration = category.duration;
+            maxClasses = category.duration * 30;
         }
     }
 
-    // 3. Convert Duration (months to days)
-    const totalClasses = duration * 30;
+    const totalClasses = Math.min(daysPassed, maxClasses);
 
-    // 4. Calculate Attendance
+    // 3. Calculate Attendance (Case-insensitive check)
     const attendanceRecords = await Attendance.find({ userId });
-    const attendedClasses = attendanceRecords.filter((r) => r.status === "present").length;
+    const attendedClasses = attendanceRecords.filter((r) => 
+        r.status && r.status.toLowerCase() === "present"
+    ).length;
     
-    // 5. Optionally compute percentage
     const attendancePercentage = totalClasses > 0 ? Math.round((attendedClasses / totalClasses) * 100) : 0;
 
     return {
         totalClasses,
         attendedClasses,
         attendancePercentage,
+        joiningDate: student.createdAt
     };
 };
 

@@ -14,6 +14,8 @@ const { autoConfigureEmail, getProviderConfig } = require('../utils/emailProvide
 
 // Generate JWT Token
 const generateToken = (id) => {
+    console.log('--- HR Token Generation Debug ---');
+    console.log('Secret used for HR signing:', process.env.JWT_SECRET);
     return jwt.sign({ id }, process.env.JWT_SECRET, {
         expiresIn: process.env.JWT_EXPIRE || '7d'
     });
