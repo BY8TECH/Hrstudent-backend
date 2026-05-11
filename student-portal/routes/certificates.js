@@ -20,6 +20,7 @@ router.get("/view/:id", viewCertificate);
 // ── Student/Admin Protected Routes ─────────────────────────────────────────────
 router.get("/user/:userId", protect, getCertificatesByUserId);
 router.post("/request", protect, requestCertificate);
+router.post("/requests", protect, requestCertificate); // Alias for plural version
 
 // ── Admin Only Routes ─────────────────────────────────────────────────────────
 router.get("/dashboard", protect, isAdmin, getDashboard);
