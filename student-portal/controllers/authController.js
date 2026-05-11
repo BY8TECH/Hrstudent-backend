@@ -79,6 +79,30 @@ exports.register = async (req, res, next) => {
 
         const user = await User.create({ name, email, mobile, password, studentType, courseName, courseId, fcmToken });
 
+        // Notify HR about new student registration
+        try {
+            const hrMongoose = require("mongoose");
+            const HRUser = hrMongoose.model("User"); // This refers to the HR User model in the default connection
+            const HRNotification = hrMongoose.model("Notification");
+
+            const hrUsers = await HRUser.find({ role: "HR" });
+            
+            const notificationPromises = hrUsers.map(hr => 
+                HRNotification.create({
+                    recipientId: hr._id,
+                    type: "StudentRegistration",
+                    title: "New Student Registered",
+                    message: `${name} has registered in the Student Portal for ${courseName || 'a course'}.`,
+                    priority: "High",
+                    actionUrl: "/students"
+                })
+            );
+
+            await Promise.all(notificationPromises);
+        } catch (notifyError) {
+            console.error("Failed to notify HR about student registration:", notifyError.message);
+        }
+
         res.status(201).json({
             success: true,
             message: "Registration successful",

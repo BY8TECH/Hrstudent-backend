@@ -266,6 +266,64 @@ exports.generateCertificate = async (req, res, next) => {
 };
 
 /**
+ * POST /api/sp/certificates/request
+ */
+exports.requestCertificate = async (req, res, next) => {
+    try {
+        const { courseName, duration } = req.body;
+        const userId = req.user._id;
+
+        if (!courseName || !duration) {
+            return res.status(400).json({ success: false, message: "Course Name and Duration are required" });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+        const request = await CertificateRequest.create({
+            userId,
+            studentName: user.name,
+            studentEmail: user.email,
+            courseName,
+            duration,
+            status: "Pending"
+        });
+
+        // Notify HR about new certificate request
+        try {
+            const hrMongoose = require("mongoose");
+            const HRUser = hrMongoose.model("User");
+            const HRNotification = hrMongoose.model("Notification");
+
+            const hrUsers = await HRUser.find({ role: "HR" });
+            
+            const notificationPromises = hrUsers.map(hr => 
+                HRNotification.create({
+                    recipientId: hr._id,
+                    type: "CertificateRequest",
+                    title: "New Certificate Request",
+                    message: `${user.name} has requested a certificate for ${courseName}.`,
+                    priority: "Medium",
+                    actionUrl: "/certificates"
+                })
+            );
+
+            await Promise.all(notificationPromises);
+        } catch (notifyError) {
+            console.error("Failed to notify HR about certificate request:", notifyError.message);
+        }
+
+        res.status(201).json({
+            success: true,
+            message: "Certificate request submitted successfully",
+            data: request
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+/**
  * GET /api/sp/certificates/all
  */
 exports.getAllCertificates = async (req, res, next) => {

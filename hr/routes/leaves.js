@@ -70,6 +70,32 @@ router.get('/balance/:employeeId', protect, checkDataAccess, isSelfOrHR, async (
 router.post('/', protect, checkDataAccess, async (req, res) => {
     try {
         const leave = await Leave.create(req.body);
+        
+        // Notify HR about new leave request
+        try {
+            const User = require('../models/User');
+            const Notification = require('../models/Notification');
+            const Employee = require('../models/Employee');
+            
+            const employee = await Employee.findById(leave.employeeId);
+            const hrUsers = await User.find({ role: 'HR' });
+            
+            const notificationPromises = hrUsers.map(hr => 
+                Notification.create({
+                    recipientId: hr._id,
+                    type: 'LeaveRequest',
+                    title: 'New Leave Request',
+                    message: `${employee ? employee.firstName + ' ' + employee.lastName : 'An employee'} has applied for ${leave.leaveType}.`,
+                    priority: 'Medium',
+                    actionUrl: '/leaves'
+                })
+            );
+
+            await Promise.all(notificationPromises);
+        } catch (notifyError) {
+            console.error('Failed to notify HR about leave request:', notifyError.message);
+        }
+
         res.status(201).json(leave);
     } catch (error) {
         res.status(500).json({ message: error.message });

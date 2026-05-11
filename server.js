@@ -125,6 +125,7 @@ const boot = async () => {
     // HR Certificates
     app.use('/api/hr/experience-letters', require('./hr/routes/experienceLetters'));
     app.use('/api/hr/offer-letters-hr', require('./hr/routes/offerLettersHR'));
+    app.use('/api/hr/notifications', require('./hr/routes/notification'));
 
     // ── Student Portal Routes (/api/sp/...) ──────────────────────────────────
     app.use('/api/sp/payments', require('./student-portal/routes/payments'));

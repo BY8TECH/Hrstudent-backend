@@ -49,6 +49,32 @@ exports.createLeave = async (req, res, next) => {
             status: "pending",
         });
 
+        // Notify HR about new student leave request
+        try {
+            const hrMongoose = require("mongoose");
+            const HRUser = hrMongoose.model("User");
+            const HRNotification = hrMongoose.model("Notification");
+            const StudentUser = require("../models/User");
+
+            const student = await StudentUser.findById(userId);
+            const hrUsers = await HRUser.find({ role: "HR" });
+            
+            const notificationPromises = hrUsers.map(hr => 
+                HRNotification.create({
+                    recipientId: hr._id,
+                    type: "LeaveRequest",
+                    title: "New Student Leave Request",
+                    message: `${student ? student.name : 'A student'} has applied for ${type} leave.`,
+                    priority: "Medium",
+                    actionUrl: "/student-leaves"
+                })
+            );
+
+            await Promise.all(notificationPromises);
+        } catch (notifyError) {
+            console.error("Failed to notify HR about student leave request:", notifyError.message);
+        }
+
         res.status(201).json({
             success: true,
             message: "Leave request submitted successfully",
