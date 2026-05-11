@@ -5,8 +5,10 @@ const User = require("../models/User");
 
 const generateToken = (user, rememberMe = false) => {
     console.log('--- Token Generation Debug ---');
-    console.log('Secret used for signing:', process.env.SP_JWT_SECRET);
-    return jwt.sign({ id: user._id, role: user.role }, process.env.SP_JWT_SECRET, {
+    // Use unified secret priority
+    const secret = process.env.JWT_SECRET || process.env.SP_JWT_SECRET;
+    console.log('Secret used for signing:', secret);
+    return jwt.sign({ id: user._id, role: user.role }, secret, {
         expiresIn: rememberMe ? "30d" : "1d",
     });
 };

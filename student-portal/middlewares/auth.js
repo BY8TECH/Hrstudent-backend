@@ -31,9 +31,15 @@ const protect = (req, res, next) => {
 
 const isAdmin = async (req, res, next) => {
     try {
+        // If the token already specifies 'HR' or 'admin' role, allow it
+        if (req.user.role === "admin" || req.user.role === "HR") {
+            return next();
+        }
+
         const user = await User.findById(req.user.id).select("role");
-        if (!user || user.role !== "admin")
+        if (!user || (user.role !== "admin" && user.role !== "HR"))
             return res.status(403).json({ success: false, message: "Admin access required" });
+        
         next();
     } catch (err) {
         next(err);
