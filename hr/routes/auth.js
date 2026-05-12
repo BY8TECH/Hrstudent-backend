@@ -79,6 +79,36 @@ router.post('/register', async (req, res) => {
                 html: otpEmailTemplate(user.username, otp)
             });
 
+            // 🔔 Notify HR about new registration
+            try {
+                const Notification = require('../models/Notification');
+                const hrUsers = await User.find({ role: 'HR' });
+                
+                const notificationPromises = hrUsers.map(hr => 
+                    Notification.create({
+                        recipientId: hr._id,
+                        type: 'HR_Registration',
+                        title: 'HR Management: New User Registration',
+                        message: `A new user ${username} (${email}) has registered and is pending verification.`,
+                        priority: 'High',
+                        actionUrl: '/pending-users'
+                    })
+                );
+
+                await Promise.all(notificationPromises);
+
+                // 📡 Trigger Real-time Notification for HR
+                const { emitToHR } = require('../../socket');
+                emitToHR('newNotification', {
+                    type: 'HR_Registration',
+                    title: 'HR Management: New User Registration',
+                    message: `A new user ${username} (${email}) has registered.`,
+                    actionUrl: '/pending-users'
+                });
+            } catch (notifyError) {
+                console.error('Failed to notify HR about new registration:', notifyError.message);
+            }
+
             res.status(201).json({
                 message: 'Registration successful! Please check your email for verification code.',
                 userId: user._id,
@@ -351,8 +381,8 @@ router.post('/verify-otp', async (req, res) => {
             const notificationPromises = hrUsers.map(hr => 
                 Notification.create({
                     recipientId: hr._id,
-                    type: 'General',
-                    title: 'New User Registration',
+                    type: 'HR_Registration',
+                    title: 'HR Management: User Registration',
                     message: `${user.username} has registered and is waiting for approval.`,
                     priority: 'High',
                     actionUrl: '/pending-users'
@@ -360,6 +390,15 @@ router.post('/verify-otp', async (req, res) => {
             );
 
             await Promise.all([...emailPromises, ...notificationPromises]);
+
+            // 📡 Trigger Real-time Notification for HR
+            const { emitToHR } = require("../../socket");
+            emitToHR("newNotification", {
+                type: "HR_Registration",
+                title: "HR Management: User Registration",
+                message: `${user.username} has registered and is waiting for approval.`,
+                actionUrl: "/pending-users"
+            });
         } catch (notifyError) {
             console.error('Failed to notify HR:', notifyError.message);
             // Don't fail the verification if notification fails

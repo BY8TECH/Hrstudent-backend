@@ -162,6 +162,36 @@ router.post('/', async (req, res) => {
                 userConfig // Pass config
             );
 
+            // 🔔 Create in-app notifications for each recipient
+            try {
+                const Notification = require('../models/Notification');
+                const { emitToUser } = require('../../socket');
+                
+                const notificationPromises = recipientUsers.map(recipient => 
+                    Notification.create({
+                        recipientId: recipient._id,
+                        type: 'HR_Email',
+                        title: `New Email: ${subject}`,
+                        message: `You have received a new email from ${req.user.username}.`,
+                        priority: 'Medium',
+                        actionUrl: `/email#${email._id}`
+                    }).then(n => {
+                        // 📡 Trigger Real-time Notification for this user
+                        emitToUser(recipient._id, 'newNotification', {
+                            _id: n._id,
+                            type: 'HR_Email',
+                            title: `New Email: ${subject}`,
+                            message: `You have received a new email from ${req.user.username}.`,
+                            actionUrl: `/email`
+                        });
+                    })
+                );
+
+                await Promise.all(notificationPromises);
+            } catch (notifyError) {
+                console.error('Failed to create in-app notifications for email:', notifyError.message);
+            }
+
             console.log('📧 Email sending results:', emailResults);
 
             // Get test account info if available

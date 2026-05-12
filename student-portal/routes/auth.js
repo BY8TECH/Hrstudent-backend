@@ -8,8 +8,10 @@ const {
     loginWithOTP,
     resetPassword,
 } = require("../controllers/authController");
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
 
-router.post("/register", register);
+router.post("/register", upload.single("image"), register);
 router.post("/login", login);
 router.post("/forgot-password", forgotPassword);
 router.post("/verify-otp", verifyOTP);

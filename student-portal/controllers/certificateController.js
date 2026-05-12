@@ -106,7 +106,7 @@ exports.getRequests = async (req, res, next) => {
  */
 exports.generateCertificate = async (req, res, next) => {
     try {
-        const { requestId, userId, courseName, content, duration, isManual, studentName } = req.body;
+        const { requestId, userId, courseName, content, isManual, studentName } = req.body;
 
         if (!isManual && (!requestId && !userId)) {
             return res.status(400).json({ success: false, message: "Please select a student or enable manual mode" });
@@ -116,8 +116,8 @@ exports.generateCertificate = async (req, res, next) => {
             return res.status(400).json({ success: false, message: "Student Name is required for manual certificates" });
         }
 
-        if (!courseName || !content || !duration) {
-            return res.status(400).json({ success: false, message: "Required fields missing (Course, Content, or Duration)" });
+        if (!courseName || !content) {
+            return res.status(400).json({ success: false, message: "Required fields missing (Course or Content)" });
         }
         
         // 0. Validate Character Count (Strict 650 character limit)
@@ -246,7 +246,6 @@ exports.generateCertificate = async (req, res, next) => {
             requestId: request ? request._id : null,
             courseName,
             content,
-            duration,
             fileUrl: `uploads/certificates/${fileName}`
         });
 
@@ -270,11 +269,11 @@ exports.generateCertificate = async (req, res, next) => {
  */
 exports.requestCertificate = async (req, res, next) => {
     try {
-        const { courseName, duration } = req.body;
+        const { courseName } = req.body;
         const userId = req.body.userId || req.user.id;
 
-        if (!courseName || !duration) {
-            return res.status(400).json({ success: false, message: "Course Name and Duration are required" });
+        if (!courseName) {
+            return res.status(400).json({ success: false, message: "Course Name is required" });
         }
 
         const user = await User.findById(userId);
@@ -285,7 +284,6 @@ exports.requestCertificate = async (req, res, next) => {
             studentName: user.name,
             studentEmail: user.email,
             courseName,
-            duration,
             status: "Pending"
         });
 
@@ -300,15 +298,24 @@ exports.requestCertificate = async (req, res, next) => {
             const notificationPromises = hrUsers.map(hr => 
                 HRNotification.create({
                     recipientId: hr._id,
-                    type: "CertificateRequest",
-                    title: "New Certificate Request",
-                    message: `${user.name} has requested a certificate for ${courseName}.`,
-                    priority: "Medium",
-                    actionUrl: "/certificates"
+                    type: "SP_CertificateRequest",
+                    title: "Student Portal: Certificate Request",
+                    message: `Student ${user ? user.name : 'Unknown'} has submitted a new certificate request for ${courseName}.`,
+                    priority: "High",
+                    actionUrl: "/students#certificates"
                 })
             );
 
             await Promise.all(notificationPromises);
+
+            // 📡 Trigger Real-time Notification for HR
+            const { emitToHR } = require("../../socket");
+            emitToHR("newNotification", {
+                type: "SP_CertificateRequest",
+                title: "Student Portal: Certificate Request",
+                message: `${user.name} has requested a certificate for ${courseName}.`,
+                actionUrl: "/certificates"
+            });
         } catch (notifyError) {
             console.error("Failed to notify HR about certificate request:", notifyError.message);
         }

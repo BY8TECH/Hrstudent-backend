@@ -6,7 +6,6 @@ const certificateRequestSchema = new mongoose.Schema(
         studentName: { type: String },
         studentEmail: { type: String },
         courseName: { type: String },
-        duration: { type: String },
         status: { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Pending" },
         requestedAt: { type: Date, default: Date.now }
     },

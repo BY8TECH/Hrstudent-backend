@@ -15,6 +15,8 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const path = require('path');
+const http = require('http');
+const socket = require('./socket');
 
 // Load environment variables
 dotenv.config();
@@ -27,11 +29,15 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Static folders for uploads (both modules)
+// Map /uploads to multiple locations to ensure files are found regardless of where they were uploaded
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'hr/uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'student-portal/uploads')));
+
+// Legacy/Module-specific static routes
 app.use('/uploads/hr', express.static(path.join(__dirname, 'hr/uploads')));
 app.use('/uploads/sp', express.static(path.join(__dirname, 'student-portal/uploads')));
 app.use('/sp/uploads', express.static(path.join(__dirname, 'uploads')));
-// Legacy: serve both at /uploads too for backward compatibility
-app.use('/uploads', express.static(path.join(__dirname, 'hr/uploads')));
 
 // ── Database Connection Check Middleware ──────────────────────────────────────
 app.use((req, res, next) => {
@@ -170,10 +176,21 @@ const boot = async () => {
 
     // Catch-all route to serve React's index.html for SPA routing
     app.get('*', (req, res) => {
+        // Skip for API routes that weren't caught
+        if (req.path.startsWith('/api/')) {
+            return res.status(404).json({ message: `API route not found: ${req.path}` });
+        }
+
         const indexPath = path.join(__dirname, '../frontend/dist/index.html');
         res.sendFile(indexPath, (err) => {
             if (err) {
-                res.status(404).json({ message: 'API route not found and frontend build not found' });
+                console.error('Frontend build error:', err.path);
+                res.status(404).json({ 
+                    message: 'Frontend build not found or API route invalid', 
+                    requestedPath: req.path,
+                    buildPath: indexPath,
+                    hint: 'Make sure the frontend is built (npm run build) and the dist folder is in the correct location.'
+                });
             }
         });
     });
@@ -190,7 +207,12 @@ const boot = async () => {
 
     // ── Start Server ─────────────────────────────────────────────────────────
     const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
+    const server = http.createServer(app);
+    
+    // Initialize Socket.io
+    socket.init(server);
+    
+    server.listen(PORT, () => {
         console.log(`\n🚀 BY8Labs Unified Server running on port ${PORT}`);
         console.log(`   HR Module:             http://localhost:${PORT}/api/hr`);
         console.log(`   Student Portal Module: http://localhost:${PORT}/api/sp\n`);

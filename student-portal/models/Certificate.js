@@ -9,7 +9,6 @@ const certificateSchema = new mongoose.Schema(
         requestId: { type: mongoose.Schema.Types.ObjectId, ref: "CertificateRequest" },
         courseName: { type: String, required: true },
         content: { type: String, required: true },
-        duration: { type: String, required: true },
         fileUrl: { type: String, required: true },
         issuedAt: { type: Date, default: Date.now }
     },

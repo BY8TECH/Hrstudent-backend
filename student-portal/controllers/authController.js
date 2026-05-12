@@ -1,5 +1,13 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const cloudinary = require("cloudinary").v2;
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,6 +61,7 @@ const sanitizeUser = (user) => ({
     fcmToken: user.fcmToken,
     role: user.role,
     isApproved: user.isApproved,
+    profileImage: user.profileImage || "",
 });
 
 // ── controllers ───────────────────────────────────────────────────────────────
@@ -79,7 +88,39 @@ exports.register = async (req, res, next) => {
         if (existing)
             return res.status(400).json({ success: false, message: "Email already registered" });
 
-        const user = await User.create({ name, email, mobile, password, studentType, courseName, courseId, fcmToken });
+        let profileImageUrl = "";
+
+        // Handle profile image upload if present
+        if (req.file) {
+            try {
+                const uploadResult = await new Promise((resolve, reject) => {
+                    const uploadStream = cloudinary.uploader.upload_stream(
+                        { folder: "profile_images" },
+                        (error, result) => {
+                            if (error) reject(error);
+                            else resolve(result);
+                        }
+                    );
+                    uploadStream.end(req.file.buffer);
+                });
+                profileImageUrl = uploadResult.secure_url;
+            } catch (uploadError) {
+                console.error("Profile image upload failed during registration:", uploadError.message);
+                // We'll continue without the image if upload fails
+            }
+        }
+
+        const user = await User.create({
+            name,
+            email,
+            mobile,
+            password,
+            studentType,
+            courseName,
+            courseId,
+            fcmToken,
+            profileImage: profileImageUrl
+        });
 
         // Notify HR about new student registration
         try {
@@ -88,19 +129,28 @@ exports.register = async (req, res, next) => {
             const HRNotification = hrMongoose.model("Notification");
 
             const hrUsers = await HRUser.find({ role: "HR" });
-            
-            const notificationPromises = hrUsers.map(hr => 
+
+            const notificationPromises = hrUsers.map(hr =>
                 HRNotification.create({
                     recipientId: hr._id,
-                    type: "StudentRegistration",
-                    title: "New Student Registered",
+                    type: "SP_Registration",
+                    title: "Student Portal: Registration",
                     message: `${name} has registered in the Student Portal for ${courseName || 'a course'}.`,
                     priority: "High",
-                    actionUrl: "/students"
+                    actionUrl: "/students#students"
                 })
             );
 
             await Promise.all(notificationPromises);
+
+            // 📡 Trigger Real-time Notification for HR
+            const { emitToHR } = require("../../socket");
+            emitToHR("newNotification", {
+                type: "SP_Registration",
+                title: "Student Portal: Registration",
+                message: `New student registration: ${name} for ${courseName || 'a course'}.`,
+                actionUrl: "/students"
+            });
         } catch (notifyError) {
             console.error("Failed to notify HR about student registration:", notifyError.message);
         }
@@ -146,9 +196,9 @@ exports.login = async (req, res, next) => {
             });
 
         // Store FCM token (only if provided and non-empty)
-        if (fcmToken && typeof fcmToken === "string" && fcmToken.trim() !== "") { 
-            user.fcmToken = fcmToken; 
-            await user.save(); 
+        if (fcmToken && typeof fcmToken === "string" && fcmToken.trim() !== "") {
+            user.fcmToken = fcmToken;
+            await user.save();
         }
 
         res.json({
@@ -383,7 +433,7 @@ exports.getStudentById = async (req, res, next) => {
 exports.updateStudentById = async (req, res, next) => {
     try {
         const { name, email, mobile, studentType, courseName, courseId, fcmToken, isApproved } = req.body;
-        
+
         let student = await User.findById(req.params.id);
         if (!student || student.role !== "student")
             return res.status(404).json({ success: false, message: "Student not found" });

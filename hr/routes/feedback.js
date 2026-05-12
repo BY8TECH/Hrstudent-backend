@@ -177,6 +177,37 @@ router.post('/', protect, upload.fields([
             .populate('submittedBy', 'username email role')
             .populate('employeeId', 'firstName lastName employeeId');
 
+        // 🔔 Notify HR about new feedback
+        try {
+            const User = require('../models/User');
+            const Notification = require('../models/Notification');
+            const hrUsers = await User.find({ role: 'HR' });
+            
+            const notificationPromises = hrUsers.map(hr => 
+                Notification.create({
+                    recipientId: hr._id,
+                    type: 'HR_Feedback',
+                    title: 'HR Management: Feedback',
+                    message: `${populatedFeedback.submittedBy?.username || 'An employee'} has submitted new feedback: "${subject}".`,
+                    priority: 'Medium',
+                    actionUrl: '/feedback'
+                })
+            );
+
+            await Promise.all(notificationPromises);
+
+            // 📡 Trigger Real-time Notification for HR
+            const { emitToHR } = require('../../socket');
+            emitToHR('newNotification', {
+                type: 'HR_Feedback',
+                title: 'HR Management: Feedback',
+                message: `${populatedFeedback.submittedBy?.username || 'An employee'} has submitted new feedback: "${subject}".`,
+                actionUrl: '/feedback'
+            });
+        } catch (notifyError) {
+            console.error('Failed to notify HR about feedback:', notifyError.message);
+        }
+
         res.status(201).json(populatedFeedback);
     } catch (error) {
         res.status(500).json({ message: error.message });

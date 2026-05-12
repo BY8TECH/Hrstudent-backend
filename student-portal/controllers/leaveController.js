@@ -62,15 +62,24 @@ exports.createLeave = async (req, res, next) => {
             const notificationPromises = hrUsers.map(hr => 
                 HRNotification.create({
                     recipientId: hr._id,
-                    type: "LeaveRequest",
+                    type: "SP_LeaveRequest",
                     title: "New Student Leave Request",
                     message: `${student ? student.name : 'A student'} has applied for ${type} leave.`,
                     priority: "Medium",
-                    actionUrl: "/student-leaves"
+                    actionUrl: "/students#leave"
                 })
             );
 
             await Promise.all(notificationPromises);
+
+            // 📡 Trigger Real-time Notification for HR
+            const { emitToHR } = require("../../socket");
+            emitToHR("newNotification", {
+                type: "SP_LeaveRequest",
+                title: "Student Portal: Leave Request",
+                message: `Student ${student ? student.name : 'Unknown'} has submitted a new leave request (${type}).`,
+                actionUrl: "/students"
+            });
         } catch (notifyError) {
             console.error("Failed to notify HR about student leave request:", notifyError.message);
         }

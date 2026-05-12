@@ -83,8 +83,8 @@ router.post('/', protect, checkDataAccess, async (req, res) => {
             const notificationPromises = hrUsers.map(hr => 
                 Notification.create({
                     recipientId: hr._id,
-                    type: 'LeaveRequest',
-                    title: 'New Leave Request',
+                    type: 'HR_LeaveRequest',
+                    title: 'HR Management: Leave Request',
                     message: `${employee ? employee.firstName + ' ' + employee.lastName : 'An employee'} has applied for ${leave.leaveType}.`,
                     priority: 'Medium',
                     actionUrl: '/leaves'
@@ -92,6 +92,15 @@ router.post('/', protect, checkDataAccess, async (req, res) => {
             );
 
             await Promise.all(notificationPromises);
+
+            // 📡 Trigger Real-time Notification for HR
+            const { emitToHR } = require('../../socket');
+            emitToHR('newNotification', {
+                type: 'HR_LeaveRequest',
+                title: 'HR Management: Leave Request',
+                message: `${employee ? employee.firstName + ' ' + employee.lastName : 'An employee'} has applied for ${leave.leaveType}.`,
+                actionUrl: '/leaves'
+            });
         } catch (notifyError) {
             console.error('Failed to notify HR about leave request:', notifyError.message);
         }

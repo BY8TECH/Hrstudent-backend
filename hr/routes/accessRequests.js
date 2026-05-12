@@ -31,11 +31,45 @@ router.post('/', protect, async (req, res) => {
             return res.status(400).json({ message: 'You already have a pending access request' });
         }
 
-        // Create new request
-        const accessRequest = await AccessRequest.create({
+        const requestData = {
             employeeId: req.user._id,
             requestMessage: req.body.message || 'Requesting access to view my attendance and submit leave requests'
-        });
+        };
+        const reason = requestData.requestMessage;
+
+        // Create new request
+        const accessRequest = await AccessRequest.create(requestData);
+
+        // 🔔 Notify HR about new access request
+        try {
+            const User = require('../models/User');
+            const Notification = require('../models/Notification');
+            const hrUsers = await User.find({ role: 'HR' });
+            
+            const notificationPromises = hrUsers.map(hr => 
+                Notification.create({
+                    recipientId: hr._id,
+                    type: 'HR_AccessRequest',
+                    title: 'HR Management: New Access Request',
+                    message: `${req.user.username} has requested data access for the reason: "${reason}".`,
+                    priority: 'Medium',
+                    actionUrl: '/access-requests'
+                })
+            );
+
+            await Promise.all(notificationPromises);
+
+            // 📡 Trigger Real-time Notification for HR
+            const { emitToHR } = require('../../socket');
+            emitToHR('newNotification', {
+                type: 'HR_AccessRequest',
+                title: 'HR Management: Access Request',
+                message: `${req.user.username} has submitted an access request.`,
+                actionUrl: '/access-requests'
+            });
+        } catch (notifyError) {
+            console.error('Failed to notify HR about access request:', notifyError.message);
+        }
 
         // Notify all HR users
         const hrUsers = await User.find({ role: 'HR' });
@@ -48,7 +82,30 @@ router.post('/', protect, async (req, res) => {
                 }).catch(err => console.error(`Failed to send email to HR ${hr.email}:`, err.message));
             }
         });
-        await Promise.all(emailPromises);
+
+        // 🔔 Create in-app notifications for all HR users
+        const Notification = require('../models/Notification');
+        const notificationPromises = hrUsers.map(hr => 
+            Notification.create({
+                recipientId: hr._id,
+                type: 'HR_AccessRequest',
+                title: 'HR Management: Access Request',
+                message: `${req.user.username} has requested data access.`,
+                priority: 'Medium',
+                actionUrl: '/access-requests'
+            })
+        );
+
+        await Promise.all([...emailPromises, ...notificationPromises]);
+
+        // 📡 Trigger Real-time Notification for HR
+        const { emitToHR } = require('../../socket');
+        emitToHR('newNotification', {
+            type: 'HR_AccessRequest',
+            title: 'HR Management: Access Request',
+            message: `${req.user.username} has requested data access.`,
+            actionUrl: '/access-requests'
+        });
 
         res.status(201).json({
             message: 'Access request submitted successfully. HR will review your request.',

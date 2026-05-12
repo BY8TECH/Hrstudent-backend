@@ -8,7 +8,13 @@ const notificationSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['Leave', 'Payroll', 'Attendance', 'Performance', 'Expense', 'Recruitment', 'Exit', 'General', 'Announcement', 'StudentRegistration', 'CertificateRequest', 'LeaveRequest'],
+        enum: [
+            'Leave', 'Payroll', 'Attendance', 'Performance', 'Expense', 'Recruitment', 'Exit', 
+            'General', 'Announcement', 'StudentRegistration', 'CertificateRequest', 'LeaveRequest',
+            'SP_Registration', 'SP_CertificateRequest', 'SP_LeaveRequest', 
+            'HR_Registration', 'HR_LeaveRequest', 'HR_Feedback', 'HR_AccessRequest', 'HR_Email',
+            'Feedback', 'PendingUser', 'Email', 'AccessRequest'
+        ],
         required: true
     },
     title: {
