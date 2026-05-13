@@ -3,11 +3,15 @@ const User = require("../models/User");
 const Course = require("../models/Course");
 
 // Lazy initialization of Stripe to prevent crash if key is missing during startup
+// NOTE: Stripe v22+ requires `new Stripe(key)` — the old factory syntax is broken in v22
 const getStripe = () => {
     if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes("xxxx")) {
         throw new Error("Stripe API key is missing or invalid in .env file.");
     }
-    return require("stripe")(process.env.STRIPE_SECRET_KEY);
+    const Stripe = require("stripe");
+    return new Stripe(process.env.STRIPE_SECRET_KEY, {
+        apiVersion: "2025-04-30.basil", // Lock to a stable API version
+    });
 };
 
 /**

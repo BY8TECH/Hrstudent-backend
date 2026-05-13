@@ -22,6 +22,8 @@ const {
     createCategory,
     postCategoryNames,
     createCourse,
+    deleteCategory,
+    deleteCourse,
 } = require("../controllers/courseController");
 const { protect, isAdmin } = require("../middlewares/auth");
 
@@ -30,8 +32,10 @@ router.get("/categories/names", postCategoryNames);   // Public: get name list
 router.post("/categories/names", protect, postCategoryNames); // Protected: if using POST
 router.get("/categories/list", getCategories);        // Public: get full list
 router.post("/categories/list", protect, isAdmin, createCategory);
+router.delete("/categories/list/:id", protect, isAdmin, deleteCategory);
 router.get("/", getCourses);                          // Public: get course list
 router.post("/", protect, isAdmin, createCourse);     // ← Admin only: Create a new course
+router.delete("/:id", protect, isAdmin, deleteCourse);
 
 // ── Lesson-level (must come before /:id routes to avoid conflicts) ──────────
 router.get("/lessons/:lessonId/mcq", protect, getLessonMCQ);
