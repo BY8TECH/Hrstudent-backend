@@ -1,6 +1,7 @@
 const Payment = require("../models/Payment");
 const User = require("../models/User");
 const Course = require("../models/Course");
+const CourseCategory = require("../models/CourseCategory");
 const Stripe = require("stripe");
 
 
@@ -87,7 +88,7 @@ exports.handleWebhook = async (req, res) => {
     try {
         const stripe = getStripe();
         event = stripe.webhooks.constructEvent(
-            req.body,
+            req.rawBody || req.body,
             sig,
             process.env.STRIPE_WEBHOOK_SECRET
         );
@@ -99,15 +100,76 @@ exports.handleWebhook = async (req, res) => {
     if (event.type === "payment_intent.succeeded") {
         const paymentIntent = event.data.object;
         const { userId, courseId } = paymentIntent.metadata;
+        
+        // Stripe amount is in cents/paisa. Convert back to INR.
+        const amountInINR = paymentIntent.amount / 100;
 
         // Update database (e.g. create/update Payment record)
         try {
-            // Logic to record the successful payment
-            console.log(`💰 Payment succeeded for user ${userId} and course ${courseId}`);
+            console.log(`💰 Payment succeeded for user ${userId} and course ${courseId}. Amount: ${amountInINR} INR`);
             
-            // You can call your existing payment logic here or update a separate OnlinePayment model
+            let payment = await Payment.findOne({ userId });
+            
+            if (!payment) {
+                console.log(`Stripe: No existing payment record for user ${userId}. Creating one...`);
+                
+                // Fetch course info to set totalFees
+                let course = await Course.findById(courseId);
+                if (!course) course = await CourseCategory.findById(courseId);
+                
+                const totalFees = course ? (course.amount || course.fees || 0) : 0;
+                
+                const duration = 90; // Default duration in days
+                const endDate = new Date();
+                endDate.setDate(endDate.getDate() + duration);
+                
+                const nextInstallment = new Date();
+                nextInstallment.setDate(nextInstallment.getDate() + 30);
+
+                payment = new Payment({
+                    userId,
+                    courseId,
+                    totalFees,
+                    paidAmount: amountInINR,
+                    remainingAmount: Math.max(0, totalFees - amountInINR),
+                    durationInDays: duration,
+                    endDate,
+                    nextInstallmentDate: nextInstallment,
+                    transactions: []
+                });
+            } else {
+                // Subsequent payment
+                payment.paidAmount += amountInINR;
+                payment.remainingAmount = Math.max(0, payment.totalFees - payment.paidAmount);
+                
+                // Update next installment date
+                const nextInstallment = new Date();
+                nextInstallment.setDate(nextInstallment.getDate() + 30);
+                payment.nextInstallmentDate = nextInstallment;
+            }
+
+            // Add the transaction record
+            payment.transactions.push({
+                amount: amountInINR,
+                method: "online",
+                type: "Online Payment (Stripe)",
+                receiptId: `STRIPE-${paymentIntent.id.slice(-6).toUpperCase()}`,
+                status: "success",
+                date: new Date()
+            });
+
+            // Update Status
+            if (payment.remainingAmount <= 0) {
+                payment.status = "paid";
+            } else {
+                payment.status = "partial";
+            }
+
+            await payment.save();
+            console.log(`✅ Database successfully updated for user ${userId}`);
+            
         } catch (dbErr) {
-            console.error("Database update error after payment:", dbErr);
+            console.error("❌ Database update error after Stripe payment:", dbErr);
         }
     }
 
