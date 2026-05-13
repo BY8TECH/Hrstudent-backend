@@ -51,18 +51,28 @@ exports.createPaymentIntent = async (req, res) => {
         console.log("Stripe: PaymentIntent created successfully:", paymentIntent.id);
         console.log("Stripe: Client Secret available:", paymentIntent.client_secret ? "Yes" : "No");
 
-        return res.status(200).json({
+        // Use more explicit response method for production debugging
+        const responseData = {
             success: true,
             clientSecret: paymentIntent.client_secret,
             id: paymentIntent.id
-        });
+        };
+
+        res.setHeader("X-Response-Source", "StripeController-Direct");
+        res.setHeader("Content-Type", "application/json");
+        
+        return res.status(200).send(JSON.stringify(responseData));
     } catch (error) {
         console.error("Stripe Error:", error);
-        return res.status(500).json({ 
+        
+        const errorResponse = { 
             success: false, 
             message: error.message,
             stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
+        };
+
+        res.setHeader("Content-Type", "application/json");
+        return res.status(500).send(JSON.stringify(errorResponse));
     }
 };
 
