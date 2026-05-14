@@ -19,9 +19,17 @@ exports.createTask = async (req, res, next) => {
         let imageUrls = [];
         let documentUrl = req.body.documentUrl || null;
 
+        // Support both single imageUrl and multiple imageUrls in body
+        if (req.body.imageUrl) imageUrls.push(req.body.imageUrl);
+        if (req.body.imageUrls) {
+            const bodyImages = Array.isArray(req.body.imageUrls) ? req.body.imageUrls : [req.body.imageUrls];
+            imageUrls = [...imageUrls, ...bodyImages];
+        }
+
         if (req.files) {
             if (req.files.image && req.files.image.length > 0) {
-                imageUrls = req.files.image.map(file => buildUrl(req, file.filename));
+                const uploadedImages = req.files.image.map(file => buildUrl(req, file.filename));
+                imageUrls = [...imageUrls, ...uploadedImages];
             }
             if (req.files.document && req.files.document[0]) {
                 documentUrl = buildUrl(req, req.files.document[0].filename);
@@ -96,6 +104,9 @@ exports.updateTask = async (req, res, next) => {
         if (createdBy) task.createdBy = createdBy;
         
         // Handle incoming URLs if they are passed as strings or arrays in req.body
+        if (req.body.imageUrl) {
+            task.imageUrls = [req.body.imageUrl];
+        }
         if (req.body.imageUrls) {
             task.imageUrls = Array.isArray(req.body.imageUrls) ? req.body.imageUrls : [req.body.imageUrls];
         }
