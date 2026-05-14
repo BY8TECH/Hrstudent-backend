@@ -118,6 +118,7 @@ exports.handleWebhook = async (req, res) => {
                 if (!course) course = await CourseCategory.findById(courseId);
                 
                 const totalFees = course ? (course.amount || course.fees || 0) : 0;
+                const courseTitle = course ? (course.title || course.name) : "Course";
                 
                 const duration = 90; // Default duration in days
                 const endDate = new Date();
