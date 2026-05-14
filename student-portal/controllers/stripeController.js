@@ -86,14 +86,23 @@ exports.handleWebhook = async (req, res) => {
     const sig = req.headers["stripe-signature"];
     let event;
 
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+        console.error("⚠️  CRITICAL: STRIPE_WEBHOOK_SECRET is missing in .env/Render. Webhook will fail verification.");
+    }
+
     try {
         const stripe = getStripe();
+        
+        // Use rawBody if available (set by server.js), else fallback to body
+        const payload = req.rawBody || req.body;
+        
         event = stripe.webhooks.constructEvent(
-            req.rawBody || req.body,
+            payload,
             sig,
             process.env.STRIPE_WEBHOOK_SECRET
         );
     } catch (err) {
+        console.error(`❌ Stripe Webhook Signature Verification Failed: ${err.message}`);
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 

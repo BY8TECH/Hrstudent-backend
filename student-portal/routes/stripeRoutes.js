@@ -7,7 +7,7 @@ const { protect } = require("../middlewares/auth");
 router.post("/create-payment-intent", protect, stripeController.createPaymentIntent);
 
 // Webhook route (should be used without 'protect' as it comes from Stripe)
-// Note: This requires express.raw() for signature verification in server.js
-router.post("/webhook", express.raw({ type: "application/json" }), stripeController.handleWebhook);
+// Note: This uses req.rawBody captured in server.js for signature verification
+router.post("/webhook", stripeController.handleWebhook);
 
 module.exports = router;
