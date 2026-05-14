@@ -37,7 +37,7 @@ exports.createPaymentIntent = async (req, res) => {
 
         // Create a PaymentIntent with the order amount and currency
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: amount, // amount in cents/paisa
+            amount: Math.round(amount * 100), // convert INR to Paisa (smallest unit)
             currency: "inr", // default to INR for this project
             automatic_payment_methods: {
                 enabled: true,
