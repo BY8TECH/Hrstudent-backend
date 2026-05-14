@@ -147,35 +147,36 @@ exports.handleWebhook = async (req, res) => {
                     userId,
                     courseId,
                     totalFees,
-                    paidAmount: amountInINR,
-                    remainingAmount: Math.max(0, totalFees - amountInINR),
+                    paidAmount: 0,
+                    remainingAmount: totalFees,
                     durationInDays: duration,
                     endDate,
                     nextInstallmentDate: nextInstallment,
                     transactions: []
                 });
-            } else {
-                // Subsequent payment
-                payment.paidAmount += amountInINR;
-                payment.remainingAmount = Math.max(0, payment.totalFees - payment.paidAmount);
-                
-                // Update next installment date
-                const nextInstallment = new Date();
-                nextInstallment.setDate(nextInstallment.getDate() + 30);
-                payment.nextInstallmentDate = nextInstallment;
             }
 
-            // Add the transaction record
+            // 1. Calculate the next installment number
+            const installmentCount = payment.transactions.filter(tx => 
+                tx.type && tx.type.toLowerCase().includes("installment")
+            ).length;
+            const nextInstallmentNum = installmentCount + 1;
+
+            // 2. Add the transaction record
             payment.transactions.push({
                 amount: amountInINR,
                 method: "online",
-                type: "Online Payment (Stripe)",
-                receiptId: `STRIPE-${paymentIntent.id.slice(-6).toUpperCase()}`,
+                type: `Installment ${nextInstallmentNum}`,
+                receiptId: `STRIPE-${paymentIntent.id.slice(-8).toUpperCase()}`,
                 status: "success",
                 date: new Date()
             });
 
-            // Update Status
+            // 3. Update Totals
+            payment.paidAmount = (payment.paidAmount || 0) + amountInINR;
+            payment.remainingAmount = Math.max(0, payment.totalFees - payment.paidAmount);
+
+            // 4. Update Overall Status
             if (payment.remainingAmount <= 0) {
                 payment.status = "paid";
             } else {
@@ -183,6 +184,7 @@ exports.handleWebhook = async (req, res) => {
             }
 
             await payment.save();
+            console.log(`✅ Success: Added Installment ${nextInstallmentNum} for user ${userId}`);
             console.log(`✅ Database successfully updated for user ${userId}`);
             
         } catch (dbErr) {
