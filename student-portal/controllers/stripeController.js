@@ -148,15 +148,11 @@ exports.handleWebhook = async (req, res) => {
                 payment.nextInstallmentDate = nextInstallment;
             }
 
-            // Calculate installment number for the history label
-            const installmentCount = payment.transactions.filter(t => t.type.includes("Installment")).length + 1;
-            const paymentLabel = `Online Payment (Stripe) - Installment ${installmentCount}`;
-
-            // Add the transaction record to history
+            // Add the transaction record
             payment.transactions.push({
                 amount: amountInINR,
                 method: "online",
-                type: paymentLabel,
+                type: "Online Payment (Stripe)",
                 receiptId: `STRIPE-${paymentIntent.id.slice(-6).toUpperCase()}`,
                 status: "success",
                 date: new Date()
@@ -170,7 +166,7 @@ exports.handleWebhook = async (req, res) => {
             }
 
             await payment.save();
-            console.log(`✅ Database successfully updated for user ${userId}. Type: ${paymentLabel}`);
+            console.log(`✅ Database successfully updated for user ${userId}`);
             
         } catch (dbErr) {
             console.error("❌ Database update error after Stripe payment:", dbErr);
