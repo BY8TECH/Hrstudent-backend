@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Payment = require("../models/Payment");
 const User = require("../models/User");
 const Course = require("../models/Course");
@@ -106,16 +107,22 @@ exports.handleWebhook = async (req, res) => {
 
         // Update database (e.g. create/update Payment record)
         try {
-            console.log(`💰 Payment succeeded for user ${userId} and course ${courseId}. Amount: ${amountInINR} INR`);
+            console.log(`💰 [Stripe Webhook] Success received for intent: ${paymentIntent.id}`);
+            console.log(`👤 User: ${userId}, Course: ${courseId}, Amount: ${amountInINR} INR`);
             
-            let payment = await Payment.findOne({ userId });
+            // Ensure userId is valid
+            if (!userId) {
+                console.error("❌ Stripe Webhook Error: No userId found in metadata");
+                return res.status(400).send("No userId in metadata");
+            }
+
+            let payment = await Payment.findOne({ userId: new mongoose.Types.ObjectId(userId) });
+            console.log(payment ? `✅ Found existing payment record for user ${userId}` : `ℹ️ No existing payment record for user ${userId}. Creating new...`);
             
             if (!payment) {
-                console.log(`Stripe: No existing payment record for user ${userId}. Creating one...`);
-                
                 // Fetch course info to set totalFees
-                let course = await Course.findById(courseId);
-                if (!course) course = await CourseCategory.findById(courseId);
+                let course = await Course.findById(new mongoose.Types.ObjectId(courseId));
+                if (!course) course = await CourseCategory.findById(new mongoose.Types.ObjectId(courseId));
                 
                 const totalFees = course ? (course.amount || course.fees || 0) : 0;
                 const courseTitle = course ? (course.title || course.name) : "Course";
