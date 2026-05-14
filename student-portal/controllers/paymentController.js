@@ -154,10 +154,109 @@ exports.getPaymentDashboard = async (req, res, next) => {
 };
 
 /**
+ * 🔹 STUDENT: Confirm Online Payment (Stripe)
+ * POST /api/payments/confirm-online
+ * Called directly by the frontend after Stripe payment succeeds.
+ * Verifies with Stripe and saves to history.
+ */
+exports.confirmOnlinePayment = async (req, res, next) => {
+    try {
+        const { paymentIntentId, userId, courseId, amount } = req.body;
+
+        if (!paymentIntentId || !userId || !amount) {
+            return res.status(400).json({ success: false, message: "paymentIntentId, userId, and amount are required" });
+        }
+
+        // Verify payment with Stripe
+        const Stripe = require("stripe");
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+        if (paymentIntent.status !== "succeeded") {
+            return res.status(400).json({ success: false, message: `Payment not confirmed. Status: ${paymentIntent.status}` });
+        }
+
+        // Amount in INR (Stripe stores in paisa)
+        const amountInINR = paymentIntent.amount / 100;
+
+        // Find existing payment record
+        let payment = await Payment.findOne({ userId });
+
+        if (!payment) {
+            // Create new payment record
+            const CourseCategory = require("../models/CourseCategory");
+            let course = null;
+            if (courseId) {
+                course = await Course.findById(courseId) || await CourseCategory.findById(courseId);
+                if (!course) course = await Course.findOne({ courseId }) || await CourseCategory.findOne({ _id: courseId });
+            }
+            if (!course) {
+                const user = await User.findById(userId).select("courseId courseName");
+                if (user?.courseId) {
+                    course = await Course.findOne({ courseId: user.courseId }) || await CourseCategory.findOne({ name: user.courseName });
+                }
+            }
+            const totalFees = course ? (course.amount || course.fees || 0) : 0;
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + 90);
+
+            payment = new Payment({
+                userId,
+                courseId: courseId || (course?._id) || userId, // fallback
+                totalFees,
+                paidAmount: 0,
+                remainingAmount: totalFees,
+                durationInDays: 90,
+                endDate,
+                transactions: []
+            });
+        }
+
+        // Calculate next installment number
+        const installmentCount = payment.transactions.filter(tx =>
+            tx.type && tx.type.toLowerCase().includes("installment")
+        ).length;
+        const nextInstallmentNum = installmentCount + 1;
+
+        // Add transaction
+        payment.transactions.push({
+            amount: amountInINR,
+            method: "online",
+            type: `Installment ${nextInstallmentNum}`,
+            receiptId: `STRIPE-${paymentIntentId.slice(-8).toUpperCase()}`,
+            status: "success",
+            date: new Date()
+        });
+
+        // Update totals
+        payment.paidAmount = (payment.paidAmount || 0) + amountInINR;
+        payment.remainingAmount = Math.max(0, payment.totalFees - payment.paidAmount);
+        payment.status = payment.remainingAmount <= 0 ? "paid" : "partial";
+
+        await payment.save();
+
+        console.log(`✅ Online payment confirmed: Installment ${nextInstallmentNum} for user ${userId}, amount ${amountInINR} INR`);
+
+        return res.json({
+            success: true,
+            message: `Installment ${nextInstallmentNum} recorded successfully`,
+            installmentNumber: nextInstallmentNum,
+            paidAmount: amountInINR,
+            remainingAmount: payment.remainingAmount
+        });
+
+    } catch (err) {
+        console.error("❌ confirmOnlinePayment error:", err);
+        next(err);
+    }
+};
+
+/**
  * 🔹 STUDENT: Payment History
  * GET /api/payments/history/:userId
  */
 exports.getPaymentHistory = async (req, res, next) => {
+
     try {
         const { userId } = req.params;
         const payment = await Payment.findOne({ userId })

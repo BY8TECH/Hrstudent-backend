@@ -10,6 +10,7 @@ const {
     listPayments,
     getStudentCourseInfo,
     downloadSingleReceipt,
+    confirmOnlinePayment,
 } = require("../controllers/paymentController");
 const { protect, isAdmin } = require("../middlewares/auth");
 
@@ -25,6 +26,9 @@ router.get("/student/:userId", protect, getPaymentDashboard);
 router.get("/history/:userId", protect, getPaymentHistory);
 router.get("/payslip/:userId", downloadPayslip);
 router.get("/receipt/:paymentId/:transactionId", downloadSingleReceipt);
+
+// 🔹 Online Payment Confirmation (called by frontend after Stripe success)
+router.post("/confirm-online", protect, confirmOnlinePayment);
 
 // 🔹 Admin/HR Routes
 router.post("/admin/add", protect, hrOnly, addManualPayment);
