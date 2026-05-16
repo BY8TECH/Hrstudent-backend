@@ -88,25 +88,48 @@ router.post('/mark', protect, checkDataAccess, async (req, res) => {
             }
         });
 
+        // NEW LOGIC: Enforce transition rules
         if (existingAttendance) {
+            // Rule 1: If Absent, cannot change back
+            if (existingAttendance.status === 'Absent') {
+                return res.status(400).json({
+                    message: `Attendance is already marked as "Absent". It cannot be changed back to "Present".`,
+                    alreadyMarked: true,
+                    status: existingAttendance.status
+                });
+            }
+
+            // Rule 2: If Present or Permission, can update/change to Permission
+            if ((existingAttendance.status === 'Present' || existingAttendance.status === 'Permission') && status === 'Permission') {
+                existingAttendance.status = 'Permission';
+                existingAttendance.permissionFrom = permissionFrom || existingAttendance.permissionFrom;
+                existingAttendance.permissionTo = permissionTo || existingAttendance.permissionTo;
+                existingAttendance.checkIn = existingAttendance.checkIn || new Date();
+                await existingAttendance.save();
+                
+                const populated = await Attendance.findById(existingAttendance._id)
+                    .populate('employeeId', 'firstName lastName employeeId');
+                return res.json(populated);
+            }
+
+            // Otherwise, default block
             return res.status(400).json({
-                message: `Attendance already marked as "${existingAttendance.status}" for today. You can only mark attendance once per day.`,
+                message: `Attendance already marked as "${existingAttendance.status}" for today.`,
                 alreadyMarked: true,
                 status: existingAttendance.status
             });
         }
 
         // Create attendance record for TODAY only
+        // Strictly allow only Present or Absent for initial marking
+        const initialStatus = (status === 'Present' || status === 'Absent') ? status : 'Present';
+
         const attendanceData = {
             employeeId: req.user.employeeId,
             date: today,
-            status: status || 'Present',
+            status: initialStatus,
             checkIn: new Date(),
             markedBy: req.user._id,
-            ...(status === 'Permission' && {
-                permissionFrom: permissionFrom || '',
-                permissionTo: permissionTo || ''
-            })
         };
 
         const attendance = await Attendance.create(attendanceData);
@@ -285,13 +308,19 @@ router.put('/:id', protect, isHR, async (req, res) => {
         const attendanceDate = new Date(existingAttendance.date);
         attendanceDate.setHours(0, 0, 0, 0);
 
-        // Only allow updates on the same day
+        // Enforce same-day update logic for both HR and Employee
         if (attendanceDate.getTime() !== today.getTime()) {
             return res.status(403).json({
                 message: 'Attendance can only be updated on the same day it was marked',
                 attendanceDate: attendanceDate.toISOString().split('T')[0],
                 today: today.toISOString().split('T')[0]
             });
+        }
+
+        // Rule enforcement for updates
+        const newStatus = req.body.status;
+        if (existingAttendance.status === 'Absent' && newStatus === 'Present') {
+            return res.status(400).json({ message: 'Cannot change status from Absent to Present' });
         }
 
         const attendance = await Attendance.findByIdAndUpdate(
@@ -385,9 +414,18 @@ router.post('/bulk-mark', protect, isHR, async (req, res) => {
                 });
 
                 if (existingAttendance) {
+                    // Allow updating Present to Permission
+                    if (existingAttendance.status === 'Present' && status === 'Permission') {
+                        existingAttendance.status = 'Permission';
+                        existingAttendance.permissionFrom = permissionFrom || '';
+                        existingAttendance.permissionTo = permissionTo || '';
+                        await existingAttendance.save();
+                        results.success.push(existingAttendance);
+                        continue;
+                    }
                     results.skipped.push({
                         employeeId,
-                        reason: 'Attendance already marked for this date'
+                        reason: `Attendance already marked as "${existingAttendance.status}" for this date`
                     });
                     continue;
                 }
