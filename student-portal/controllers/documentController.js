@@ -3,6 +3,7 @@ const cloudinary = require("../config/cloudinary");
 const { Readable } = require('stream');
 const path = require('path');
 const fs = require('fs');
+const axios = require('axios');
 
 // ── Upload Document ──────────────────────────────────────────────────────────
 exports.uploadDocument = async (req, res, next) => {
@@ -23,11 +24,13 @@ exports.uploadDocument = async (req, res, next) => {
         // Upload to Cloudinary using buffer stream
         const uploadToCloudinary = (buffer) => {
             return new Promise((resolve, reject) => {
+                const ext = path.extname(req.file.originalname) || '.pdf';
+                const publicId = `doc-${Date.now()}${ext}`;
                 const stream = cloudinary.uploader.upload_stream(
                     {
                         folder: "student_portal/docs",
                         resource_type: "raw", // use raw for PDF
-                        public_id: `doc-${Date.now()}`
+                        public_id: publicId
                     },
                     (error, result) => {
                         if (error) reject(error);
@@ -136,14 +139,25 @@ exports.downloadDocument = async (req, res, next) => {
 
         const fileUrl = document.fileUrl || '';
 
-        // ── Case 1: Cloudinary URL ─────────────────────────────────────────
+        // ── Case 1: Cloudinary URL — Stream through backend for correct headers ──
         if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-            let downloadUrl = fileUrl;
-            // Add fl_attachment so Cloudinary forces a download instead of inline view
-            if (downloadUrl.includes('/upload/') && !downloadUrl.includes('fl_attachment')) {
-                downloadUrl = downloadUrl.replace('/upload/', '/upload/fl_attachment/');
+            try {
+                const response = await axios({
+                    method: 'get',
+                    url: fileUrl,
+                    responseType: 'stream'
+                });
+                
+                // Set headers to force download with correct filename
+                res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
+                
+                return response.data.pipe(res);
+            } catch (streamErr) {
+                console.error('Cloudinary Stream Error:', streamErr);
+                // Fallback to redirect if streaming fails
+                return res.redirect(fileUrl);
             }
-            return res.redirect(downloadUrl);
         }
 
         // ── Case 2: Legacy local file path (e.g. uploads/docs/file-....pdf) ─
