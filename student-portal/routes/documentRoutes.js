@@ -25,10 +25,13 @@ router.post("/upload", upload.single("file"), documentController.uploadDocument)
 // GET /api/documents/admin/all (For Admin panel)
 router.get("/admin/all", documentController.getAllDocuments);
 
+// GET /api/documents/download/:documentId  ← must be BEFORE /:userId wildcard
+router.get("/download/:documentId", documentController.downloadDocument);
+
+// GET /api/documents/download/:userId/:documentId  (legacy / direct URL pattern)
+router.get("/download/:userId/:documentId", documentController.downloadDocument);
+
 // GET /api/documents/:userId
 router.get("/:userId", documentController.getDocuments);
-
-// GET /api/documents/download/:documentId
-router.get("/download/:documentId", documentController.downloadDocument);
 
 module.exports = router;

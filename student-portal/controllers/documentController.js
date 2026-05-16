@@ -1,6 +1,8 @@
 const Document = require("../models/Document");
 const cloudinary = require("../config/cloudinary");
 const { Readable } = require('stream');
+const path = require('path');
+const fs = require('fs');
 
 // ── Upload Document ──────────────────────────────────────────────────────────
 exports.uploadDocument = async (req, res, next) => {
@@ -121,25 +123,47 @@ exports.getDocuments = async (req, res, next) => {
 
 // ── Download Document ────────────────────────────────────────────────────────
 exports.downloadDocument = async (req, res, next) => {
-    console.log('--- Cloudinary Download Request ---');
-    console.log('DocumentID:', req.params.documentId);
+    // Support both /download/:documentId and /download/:userId/:documentId
+    const documentId = req.params.documentId || req.params[0];
+    console.log('--- Download Request ---');
+    console.log('Params:', req.params, '→ documentId:', documentId);
     try {
-        const { documentId } = req.params;
-
         const document = await Document.findById(documentId);
 
         if (!document) {
             return res.status(404).json({ success: false, message: "Document not found" });
         }
 
-        // For Cloudinary, we can redirect to the secure_url
-        // To force download, we can use the 'fl_attachment' flag in the URL
-        let downloadUrl = document.fileUrl;
-        if (downloadUrl.includes('upload/')) {
-            downloadUrl = downloadUrl.replace('upload/', 'upload/fl_attachment/');
+        const fileUrl = document.fileUrl || '';
+
+        // ── Case 1: Cloudinary URL ─────────────────────────────────────────
+        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+            let downloadUrl = fileUrl;
+            // Add fl_attachment so Cloudinary forces a download instead of inline view
+            if (downloadUrl.includes('/upload/') && !downloadUrl.includes('fl_attachment')) {
+                downloadUrl = downloadUrl.replace('/upload/', '/upload/fl_attachment/');
+            }
+            return res.redirect(downloadUrl);
         }
 
-        res.redirect(downloadUrl);
+        // ── Case 2: Legacy local file path (e.g. uploads/docs/file-....pdf) ─
+        // Resolve against the student-portal root directory
+        const spRoot = path.join(__dirname, '..'); // student-portal/
+        const absolutePath = path.resolve(spRoot, fileUrl);
+
+        if (!fs.existsSync(absolutePath)) {
+            console.error(`Local file not found: ${absolutePath}`);
+            return res.status(404).json({
+                success: false,
+                message: "File not found on server. It may have been uploaded before cloud storage was configured. Please re-upload the document.",
+                fileName: document.fileName,
+            });
+        }
+
+        res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
+        res.setHeader('Content-Type', 'application/pdf');
+        return res.sendFile(absolutePath);
+
     } catch (err) {
         console.error('Download error:', err);
         res.status(500).json({ success: false, message: "Error processing download" });
